@@ -1,0 +1,19 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Database (Do not commit local data)
+*.db
+mrf_data.db
+
+# Project folders for temporary/generated content
+uploads/
+reports/
+
+# OS specific files
+.DS_Store
