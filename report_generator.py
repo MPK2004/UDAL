@@ -10,6 +10,9 @@ import csv
 import os
 
 def init_db(db_path):
+    """
+    Initializes the SQLite database with the required table.
+    """
     conn = sqlite3.connect(db_path)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS waste_records (
@@ -23,32 +26,58 @@ def init_db(db_path):
     conn.close()
 
 def import_csv_data(db_path, csv_path):
+    """
+    Imports data from a CSV file into the database.
+    Includes robust column mapping to handle different header names.
+    """
     conn = sqlite3.connect(db_path)
     c = conn.cursor()
     
-    # Clear existing data
-    c.execute("DELETE FROM waste_records")
-    
-    # Load CSV data
     with open(csv_path, 'r') as f:
         reader = csv.DictReader(f)
+        reader.fieldnames = [name.strip() for name in reader.fieldnames]
+        
         for row in reader:
-            c.execute(
-                "INSERT INTO waste_records (date, vehicle_id, weight, material, destination) VALUES (?, ?, ?, ?, ?)",
-                (row['date'], row['vehicle_id'], float(row['weight']), row['material'], row['destination'])
-            )
+            date_val = row.get('date', row.get('Date'))
+            
+            vehicle = row.get('vehicle_id', row.get('vehicle_no', row.get('Vehicle No')))
+            
+            weight_val = row.get('weight', row.get('weight_kg', row.get('Weight')))
+            
+            material_val = row.get('material', row.get('waste_type', row.get('Waste Type')))
+            
+            dest_val = row.get('destination', row.get('source_panchayat', row.get('Source')))
+
+            if date_val and weight_val:
+                try:
+                    c.execute(
+                        "INSERT INTO waste_records (date, vehicle_id, weight, material, destination) VALUES (?, ?, ?, ?, ?)",
+                        (
+                            date_val, 
+                            vehicle, 
+                            float(weight_val), 
+                            material_val, 
+                            dest_val
+                        )
+                    )
+                except ValueError:
+                    print(f"Skipping row due to invalid data: {row}")
     
     conn.commit()
     conn.close()
     print(f"Imported data from {csv_path}")
 
 def load_sample_data(db_path):
+    """
+    Generates 100 records of mock data for testing purposes.
+    """
     materials = ["PET", "HDPE", "Paper", "Glass", "MLP", "Rubber"]
     destinations = ["Reliance Recycling", "ACC Cement", "ITC Paper Mill"]
+    
     conn = sqlite3.connect(db_path)
     c = conn.cursor()
     
-    # Clear existing data
+    # Clear existing data to avoid duplicates when loading sample data
     c.execute("DELETE FROM waste_records")
     
     # Generate data for last 30 days
@@ -66,11 +95,18 @@ def load_sample_data(db_path):
             random.choice(destinations)
         )
         c.execute("INSERT INTO waste_records (date, vehicle_id, weight, material, destination) VALUES (?,?,?,?,?)", record)
+    
     conn.commit()
     conn.close()
     print("Loaded 100 sample records")
 
 def generate_reports(db_path, start_date, end_date, report_folder):
+    """
+    Generates CSV and PDF reports for the specified date range.
+    """
+    if not os.path.exists(report_folder):
+        os.makedirs(report_folder)
+
     conn = sqlite3.connect(db_path)
     query = f"""
         SELECT date, vehicle_id, weight, material, destination 
@@ -90,14 +126,13 @@ def generate_reports(db_path, start_date, end_date, report_folder):
         "MLP": -4, "Rubber": -4
     }
     
-    # Generate CSV Report
     csv_filename = f"MRF_Report_{start_date}_to_{end_date}.csv"
     csv_filepath = os.path.join(report_folder, csv_filename)
     df.to_csv(csv_filepath, index=False)
     
-    # Generate PDF Report
     pdf_filename = f"MRF_Report_{start_date}_to_{end_date}.pdf"
     pdf_filepath = os.path.join(report_folder, pdf_filename)
+    
     doc = SimpleDocTemplate(pdf_filepath, pagesize=A4)
     styles = getSampleStyleSheet()
     elements = []
@@ -107,7 +142,7 @@ def generate_reports(db_path, start_date, end_date, report_folder):
     elements.append(Paragraph(f"Report Period: {start_date} to {end_date}", styles['Normal']))
     elements.append(Spacer(1, 12))
     
-    # Summary statistics
+    # Summary Statistics
     total_weight = df['weight'].sum()
     summary_data = [
         ["Total Waste Processed", f"{total_weight:.2f} kg"],
@@ -132,7 +167,6 @@ def generate_reports(db_path, start_date, end_date, report_folder):
     elements.append(summary_table)
     elements.append(Spacer(1, 24))
     
-    # Material distribution table
     material_table = [["Material", "Weight (kg)", "Rate (₹/kg)", "Revenue (₹)"]]
     material_totals = df.groupby('material')['weight'].sum()
     
@@ -163,7 +197,6 @@ def generate_reports(db_path, start_date, end_date, report_folder):
     elements.append(Paragraph("Material Distribution & Revenue", styles['Heading3']))
     elements.append(mat_table)
     
-    # Destination summary table
     elements.append(Spacer(1, 24))
     elements.append(Paragraph("Destination Summary", styles['Heading3']))
     
@@ -188,10 +221,10 @@ def generate_reports(db_path, start_date, end_date, report_folder):
     ]))
     elements.append(dest_table_view)
     
-    # Add footer
     elements.append(Spacer(1, 24))
     elements.append(Paragraph(f"Report generated on: {datetime.now().strftime('%Y-%m-%d %H:%M')}", 
                              styles['Italic']))
     
     doc.build(elements)
-    return csv_filename, pdf_filename
+    
+    return csv_filepath, pdf_filepath
