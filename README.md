@@ -160,8 +160,8 @@ Revenue is calculated using a predefined material rate mapping:
 | HDPE     | 28          |
 | Paper    | 11          |
 | Glass    | 2           |
-| MLP      | -4          |
-| Rubber   | -4          |
+| MLP      | 4           |
+| Rubber   | 4           |
 
 For each material:
 
